@@ -1,0 +1,400 @@
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Arial,sans-serif;
+}
+
+body{
+    background:#121212;
+    color:#fff;
+    padding:20px;
+    padding-bottom:110px; /* leave room for the fixed player bar */
+}
+
+.container{
+    max-width:600px;
+    margin:auto;
+}
+
+h1{
+    text-align:center;
+    margin-bottom:20px;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs{
+    display:flex;
+    gap:8px;
+    margin-bottom:18px;
+    background:#181818;
+    padding:6px;
+    border-radius:14px;
+}
+
+.tab-btn{
+    flex:1;
+    padding:11px;
+    border:none;
+    border-radius:10px;
+    background:transparent;
+    color:#bbb;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.tab-btn.active{
+    background:#1DB954;
+    color:#fff;
+}
+
+.tab-panel{
+    display:none;
+}
+
+.tab-panel.active{
+    display:block;
+}
+
+/* ---------- Search ---------- */
+
+.search{
+    display:flex;
+    gap:10px;
+}
+
+input{
+    flex:1;
+    padding:13px;
+    border:none;
+    border-radius:10px;
+    background:#222;
+    color:#fff;
+    outline:none;
+}
+
+button{
+    padding:13px 18px;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    background:#1DB954;
+    color:#fff;
+    font-weight:bold;
+}
+
+button:hover{
+    opacity:.9;
+}
+
+/* ---------- Single song result ---------- */
+
+.card{
+    margin-top:25px;
+    background:#181818;
+    border-radius:18px;
+    padding:20px;
+    text-align:center;
+    box-shadow:0 0 15px rgba(0,0,0,.3);
+}
+
+.cover{
+    width:220px;
+    height:220px;
+    object-fit:cover;
+    border-radius:18px;
+    margin-bottom:15px;
+}
+
+.card h2{
+    margin:8px 0;
+}
+
+.card p{
+    color:#bbb;
+    margin:5px 0;
+}
+
+.card-actions{
+    display:flex;
+    justify-content:center;
+    gap:8px;
+    margin-top:15px;
+    flex-wrap:wrap;
+}
+
+.btn{
+    display:inline-block;
+    padding:12px 18px;
+    border-radius:10px;
+    background:#1DB954;
+    color:white;
+    text-decoration:none;
+    font-weight:bold;
+    border:none;
+    cursor:pointer;
+}
+
+.spotify{
+    background:#2a2a2a;
+}
+
+.btn:hover{
+    opacity:.9;
+}
+
+/* ---------- Playlist ---------- */
+
+.playlist-header{
+    display:flex;
+    align-items:center;
+    gap:15px;
+    margin-top:20px;
+    background:#181818;
+    border-radius:16px;
+    padding:15px;
+}
+
+.playlist-header img{
+    width:80px;
+    height:80px;
+    border-radius:10px;
+    object-fit:cover;
+}
+
+.playlist-header .pl-meta strong{
+    display:block;
+    font-size:1.1em;
+}
+
+.playlist-header .pl-meta span{
+    color:#999;
+    font-size:.9em;
+}
+
+.playlist-actions{
+    display:none;
+    gap:10px;
+    margin-top:14px;
+    flex-wrap:wrap;
+}
+
+.playlist-actions.show{
+    display:flex;
+}
+
+.btn-action{
+    background:#222;
+    color:#fff;
+    font-weight:bold;
+    border-radius:10px;
+    padding:10px 14px;
+    border:none;
+    cursor:pointer;
+}
+
+.btn-action.on{
+    background:#1DB954;
+}
+
+.track-list{
+    margin-top:16px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+}
+
+.track-item{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    background:#181818;
+    border-radius:12px;
+    padding:10px;
+    cursor:pointer;
+}
+
+.track-item:hover{
+    background:#222;
+}
+
+.track-item.playing{
+    background:#1DB95422;
+    border:1px solid #1DB954;
+}
+
+.track-item img{
+    width:52px;
+    height:52px;
+    border-radius:8px;
+    object-fit:cover;
+    flex-shrink:0;
+}
+
+.track-meta{
+    flex:1;
+    min-width:0;
+}
+
+.track-meta .t-title{
+    font-weight:bold;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.track-meta .t-sub{
+    color:#999;
+    font-size:.85em;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.track-dl{
+    background:none;
+    border:none;
+    color:#1DB954;
+    font-size:1.3em;
+    padding:6px 10px;
+    cursor:pointer;
+}
+
+.msg{
+    text-align:center;
+    color:#999;
+    margin-top:20px;
+}
+
+/* ---------- Custom player bar (replaces the ugly native white audio UI) ---------- */
+
+.player{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:0;
+    background:#181818;
+    border-top:1px solid #262626;
+    padding:10px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    box-shadow:0 -4px 18px rgba(0,0,0,.4);
+    z-index:50;
+}
+
+.player-cover{
+    width:52px;
+    height:52px;
+    border-radius:8px;
+    object-fit:cover;
+    background:#222;
+    flex-shrink:0;
+}
+
+.player-info{
+    flex:1;
+    min-width:0;
+}
+
+.player-title{
+    font-weight:bold;
+    font-size:.95em;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.player-artist{
+    color:#999;
+    font-size:.8em;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+.player-progress{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:4px;
+}
+
+.player-time{
+    font-size:.7em;
+    color:#999;
+    min-width:32px;
+}
+
+/* Custom dark range slider so nothing renders as a plain white bar */
+.seek{
+    -webkit-appearance:none;
+    appearance:none;
+    flex:1;
+    height:4px;
+    border-radius:2px;
+    background:#3a3a3a;
+    outline:none;
+    cursor:pointer;
+}
+
+.seek::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    appearance:none;
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    background:#1DB954;
+    cursor:pointer;
+    border:none;
+}
+
+.seek::-moz-range-thumb{
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    background:#1DB954;
+    cursor:pointer;
+    border:none;
+}
+
+.seek::-moz-range-track{
+    height:4px;
+    border-radius:2px;
+    background:#3a3a3a;
+}
+
+.player-controls{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-shrink:0;
+}
+
+.ctrl-btn{
+    background:none;
+    border:none;
+    color:#fff;
+    font-size:1.1em;
+    padding:8px;
+    border-radius:50%;
+    cursor:pointer;
+    line-height:1;
+}
+
+.ctrl-btn:hover{
+    background:#262626;
+    opacity:1;
+}
+
+.ctrl-btn.play{
+    background:#1DB954;
+    width:38px;
+    height:38px;
+}
+
+@media (max-width:480px){
+    .player-artist{ display:none; }
+    .player-cover{ width:42px; height:42px; }
+}
