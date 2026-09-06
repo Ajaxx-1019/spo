@@ -1,4 +1,5 @@
-import { resolvePlaylist } from "./_lib/musicfab.js";
+import { setSpotifySource, scrapeSpotify } from "../lib/scrapers/spotify.js";
+import { cleanUrl } from "../lib/utils/index.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -10,68 +11,38 @@ export default async function handler(req, res) {
 
   try {
     let url = (req.query.url || "").trim();
+    const source = (req.query.source || "spotidown").trim();
 
     if (!url) {
       return res.status(400).json({
         status: false,
-        message: "Parameter url wajib diisi."
+        message: "Parameter url wajib diisi.",
       });
     }
 
-    // Bersihin tracking params (si, utm_source, pi, dll) biar URL-nya rapi
-    try {
-      const u = new URL(url);
-      url = `${u.origin}${u.pathname}`;
-    } catch {
-      // bukan URL valid, biarin apa adanya
-    }
-
-    let data;
-    try {
-      data = await resolvePlaylist(url);
-    } catch (err) {
-      return res.status(502).json({
+    if (!/open\.spotify\.com/i.test(url)) {
+      return res.status(400).json({
         status: false,
-        message: err.message,
-        upstream_status: err.upstream_status,
-        upstream_body: err.upstream_body
+        message: "Link yang dimasukkan bukan link Spotify.",
       });
     }
 
-    const rawTracks = data?.tracks || [];
+    url = cleanUrl(url);
 
-    if (!rawTracks.length) {
-      return res.status(404).json({
-        status: false,
-        message: "Playlist tidak ditemukan atau kosong.",
-        upstream: data
-      });
+    setSpotifySource(source === "soundloaders" ? "soundloaders" : "spotidown");
+
+    const result = await scrapeSpotify(url);
+
+    if (!result.status) {
+      return res.status(502).json(result);
     }
 
-    const tracks = rawTracks.map((t) => ({
-      cover: t.cover || t.image || t.thumbnail || "",
-      title: t.title || t.name || "Unknown",
-      artist: t.artist || t.artists || "Unknown",
-      album: t.album || "",
-      duration: t.duration || "",
-      // dipakai frontend buat resolve download/stream lewat musicfab
-      spotify_url: t.spotify_url || t.url || t.external_url || ""
-    }));
-
-    return res.status(200).json({
-      status: true,
-      cover: data.cover || data.image || "",
-      title: data.name || "Playlist",
-      description: data.description || "",
-      owner: data.owner || "",
-      total: data.total || tracks.length,
-      tracks
-    });
+    return res.status(200).json(result);
 
   } catch (err) {
     return res.status(500).json({
       status: false,
-      message: err.message
+      message: err.message,
     });
   }
 }
