@@ -1,3 +1,4 @@
+import { load } from "cheerio";
 import {
   CHROME_UA,
   getCookiesFromHeaders,
@@ -150,7 +151,6 @@ export async function scrapeSpotify(url) {
         throw new Error("No tracks found from SoundLoaders.");
       }
 
-      // Instant Playlist Parsing (Instant < 1s UI response)
       const downloads = [];
       const isPlaylistOrAlbum = parsed.tracks.length > 1;
 
@@ -164,7 +164,6 @@ export async function scrapeSpotify(url) {
           : track.title;
 
         if (i === 0 && !isPlaylistOrAlbum) {
-          // Single track: fetch direct download URL immediately
           try {
             const dlRes = await scraperFetch(
               {
@@ -196,7 +195,6 @@ export async function scrapeSpotify(url) {
           } catch (e) {}
         }
 
-        // Lazy resolve fallback for playlist items
         if (downloads.length === 0 || isPlaylistOrAlbum) {
           downloads.push({
             type: isPlaylistOrAlbum
@@ -228,7 +226,7 @@ export async function scrapeSpotify(url) {
       });
     }
 
-    // Default: SpotiDown
+    // Default: SpotiDown (via cheerio instead of DOMParser)
     let cookies = "";
     let baseData = {};
     const now = Date.now();
@@ -248,10 +246,12 @@ export async function scrapeSpotify(url) {
       currentStatus = r1.status;
       cookies = getCookiesFromHeaders(r1.headers);
 
-      const formInputs = extractFirstFormInputs(r1.data, "spotifyurl");
-      for (const [name, value] of Object.entries(formInputs)) {
-        if (name !== "url") baseData[name] = value;
-      }
+      const $1 = load(r1.data);
+      $1('form[name="spotifyurl"] input').each((_, input) => {
+        const name = $1(input).attr("name");
+        const value = $1(input).attr("value") || "";
+        if (name && name !== "url") baseData[name] = value;
+      });
       _spSessionCache = { cookies, baseData, time: now };
     }
 
@@ -291,7 +291,8 @@ export async function scrapeSpotify(url) {
     }
 
     let finalHtml = r2Data.data || r2Data;
-    const forms2 = extractFormsWithContext(finalHtml, "submitspurl");
+    const $2 = load(finalHtml);
+    const forms2 = $2('form[name="submitspurl"]').toArray();
 
     const downloads = [];
     const r3Headers = {
@@ -306,8 +307,15 @@ export async function scrapeSpotify(url) {
     const isMultiTrack = forms2.length > 1;
 
     for (let i = 0; i < forms2.length; i++) {
-      const { inner, before } = forms2[i];
-      const data2 = extractInputsFromBlock(inner);
+      const form2 = forms2[i];
+      const data2 = {};
+      $2(form2)
+        .find("input")
+        .each((_, input) => {
+          const name = $2(input).attr("name");
+          const value = $2(input).attr("value") || "";
+          if (name) data2[name] = value;
+        });
       data2["g-recaptcha-response"] = "dummy_token";
       const payloadStr = serializeData(data2);
 
@@ -315,7 +323,7 @@ export async function scrapeSpotify(url) {
         ? `${(i + 1).toString().padStart(String(forms2.length).length, "0")}. `
         : "";
 
-      // Extract track title from base64 data input, or nearby heading as fallback
+      // Extract track title from base64 data input or nearby container
       let itemTitle = "";
       const dataVal = data2["data"];
       if (dataVal) {
@@ -328,11 +336,14 @@ export async function scrapeSpotify(url) {
         } catch (e) {}
       }
       if (!itemTitle) {
-        itemTitle = findNearbyHeading(before);
+        const container = $2(form2).closest(".col-md-4, .col-sm-6, .card, .row, div");
+        if (container.length) {
+          const h = container.find("h3, h4, h5, .title, p").first();
+          if (h.length && h.text().trim()) itemTitle = h.text().trim();
+        }
       }
 
       if (i === 0 && !isMultiTrack) {
-        // Fetch track 1 immediately for single track
         try {
           const r3 = await scraperFetch(
             {
@@ -351,15 +362,18 @@ export async function scrapeSpotify(url) {
             } catch (e) {}
           }
           const trackHtml = r3Data.data || r3Data;
+          const $3 = load(trackHtml);
 
-          const trackTitle = matchFirstTag(trackHtml, "h3");
-          const artist = matchFirstTag(trackHtml, "p");
+          const trackTitle = $3("h3").first().text().trim();
+          const artist = $3("p").first().text().trim();
 
-          extractAnchors(trackHtml).forEach(({ href, text }) => {
+          $3("a").each((_, a) => {
+            const link = $3(a).attr("href");
+            const text = $3(a).text().trim();
             if (
-              href &&
-              href.startsWith("http") &&
-              !href.includes("premium.html") &&
+              link &&
+              link.startsWith("http") &&
+              !link.includes("premium.html") &&
               text !== "Download Another Song"
             ) {
               const fullLabel =
@@ -368,7 +382,7 @@ export async function scrapeSpotify(url) {
                   : trackTitle || text || "MP3";
 
               const isCover =
-                text.toLowerCase().includes("cover") || href.includes("cover");
+                text.toLowerCase().includes("cover") || link.includes("cover");
               const typeLabel = isCover ? "[Cover]" : "[MP3]";
 
               downloads.push({
@@ -377,14 +391,13 @@ export async function scrapeSpotify(url) {
                   : isCover
                     ? "Cover"
                     : "MP3",
-                url: href,
+                url: link,
               });
             }
           });
         } catch (e) {}
       }
 
-      // Add lazy resolver link for playlist items or fallback
       if (downloads.length === 0 || isMultiTrack) {
         downloads.push({
           type: isMultiTrack
@@ -399,7 +412,6 @@ export async function scrapeSpotify(url) {
       throw new Error("No download links found from SpotiDown.");
     }
 
-    // Prioritize MP3 audio files over album cover images
     downloads.sort((a, b) => {
       const aIsCover =
         (a.type || "").includes("[Cover]") ||
@@ -412,9 +424,9 @@ export async function scrapeSpotify(url) {
       return 0;
     });
 
-    const title = matchFirstTag(finalHtml, "h3") || "Spotify Track";
-    const artist = matchFirstTag(finalHtml, "p");
-    const thumbnail = extractImgSrc(finalHtml);
+    const title = $2("h3").first().text().trim() || "Spotify Track";
+    const artist = $2("p").first().text().trim();
+    const thumbnail = $2("img").first().attr("src");
 
     _spSource = null;
     return createScraperResult(true, {
@@ -430,6 +442,7 @@ export async function scrapeSpotify(url) {
 }
 
 function parseSoundloadersTracks(html) {
+  const $ = load(html);
   const out = {
     title: "",
     artist: "",
@@ -438,21 +451,9 @@ function parseSoundloadersTracks(html) {
     tracks: [],
   };
 
-  // Thumbnail: img with rounded-xl class
-  const imgRe =
-    /<img[^>]+src=["']([^"']+)["'][^>]*class=["'][^"']*rounded-xl[^"']*["']/i;
-  const imgM = html.match(imgRe);
-  if (imgM) out.thumbnail = imgM[1];
-
-  // Title: <h2 ...>...</h2>
-  const h2Re = /<h2[^>]*>([\s\S]*?)<\/h2>/i;
-  const h2M = html.match(h2Re);
-  if (h2M) out.title = stripHtml(h2M[1]);
-
-  // Artist: paragraph after h2
-  const pRe = /<p class="text-sm text-white\/60 mb-8">([\s\S]*?)<\/p>/i;
-  const pM = html.match(pRe);
-  if (pM) out.artist = stripHtml(pM[1]);
+  out.thumbnail = $("img.rounded-xl").first().attr("src") || "";
+  out.title = $("h2").first().text().trim();
+  out.artist = $("p.text-sm.text-white\\/60.mb-8").first().text().trim();
 
   if (html.includes("playlist-songs") || html.includes("Playlist")) {
     out.type = "playlist";
@@ -460,11 +461,7 @@ function parseSoundloadersTracks(html) {
     out.type = "album";
   }
 
-  // Extract each track form
-  const formRe = /<form[^>]*name=["']submitspurl["'][^>]*>([\s\S]*?)<\/form>/gi;
-  let fm;
-  while ((fm = formRe.exec(html)) !== null) {
-    const fh = fm[1];
+  $('form[name="submitspurl"]').each((_, form) => {
     const track = {
       data: "",
       trackToken: "",
@@ -473,16 +470,9 @@ function parseSoundloadersTracks(html) {
       thumbnail: "",
     };
 
-    const dataM = fh.match(
-      /<input[^>]+name=["']data["'][^>]+value=["']([^"']*)["']/,
-    );
-    if (dataM) track.data = dataM[1];
-    const tokM = fh.match(
-      /<input[^>]+name=["']track_token["'][^>]+value=["']([^"']*)["']/,
-    );
-    if (tokM) track.trackToken = tokM[1];
+    track.data = $(form).find('input[name="data"]').attr("value") || "";
+    track.trackToken = $(form).find('input[name="track_token"]').attr("value") || "";
 
-    // Decode base64 data to get track info
     if (track.data) {
       try {
         const decoded = JSON.parse(atob(track.data));
@@ -492,38 +482,32 @@ function parseSoundloadersTracks(html) {
       } catch {}
     }
 
-    // Fallback: parse from nearby text
     if (!track.title) {
-      const texts = fh.match(/>([^<]+)</g);
-      if (texts) {
-        for (const t of texts) {
-          const clean = t.replace(/[><]/g, "").trim();
-          if (clean && clean.length > 2 && clean !== "Download") {
-            if (clean.includes(" - ")) {
-              const sp = clean.split(" - ");
-              track.artist = sp[0].trim();
-              track.title = sp[1]?.trim() || "";
-            } else if (!track.title) {
-              track.title = clean;
-            }
-          }
+      const text = $(form).text().trim();
+      if (text) {
+        if (text.includes(" - ")) {
+          const sp = text.split(" - ");
+          track.artist = sp[0].trim();
+          track.title = sp[1]?.trim() || "";
+        } else {
+          track.title = text;
         }
       }
     }
 
     out.tracks.push(track);
-  }
+  });
 
   return out;
 }
 
 function parseSoundloadersDownloads(html) {
+  const $ = load(html);
   const downloads = [];
-  const aRe = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-  while ((m = aRe.exec(html)) !== null) {
-    const link = m[1].trim();
-    const text = stripHtml(m[2]);
+
+  $("a").each((_, a) => {
+    const link = ($(a).attr("href") || "").trim();
+    const text = $(a).text().trim();
 
     if (
       link &&
@@ -536,7 +520,7 @@ function parseSoundloadersDownloads(html) {
         text.toLowerCase().includes("cover") ||
         link.includes("cover") ||
         link.includes("scdn.co") ||
-        link.match(/\.(jpg|jpeg|png|webp)(\?.*)?$/i);
+        /\.(jpg|jpeg|png|webp)(\?.*)?$/i.test(link);
       const typeLabel = isCover ? "[Cover]" : "[MP3]";
 
       downloads.push({
@@ -544,94 +528,7 @@ function parseSoundloadersDownloads(html) {
         url: link,
       });
     }
-  }
+  });
+
   return downloads;
-}
-
-function stripHtml(s) {
-  return s
-    .replace(/<[^>]+>/g, "")
-    .replace(/&#0?39;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .trim();
-}
-
-/* ---------- Regex-based mini "DOM" helpers (no DOMParser needed) ---------- */
-
-function extractInputsFromBlock(html) {
-  const inputs = {};
-  const inputRe = /<input\b[^>]*>/gi;
-  let m;
-  while ((m = inputRe.exec(html)) !== null) {
-    const tag = m[0];
-    const nameM = tag.match(/name=["']([^"']*)["']/i);
-    if (!nameM) continue;
-    const valueM = tag.match(/value=["']([^"']*)["']/i);
-    inputs[nameM[1]] = valueM ? valueM[1] : "";
-  }
-  return inputs;
-}
-
-function extractFirstFormInputs(html, formName) {
-  const re = new RegExp(
-    `<form[^>]*name=["']${formName}["'][^>]*>([\\s\\S]*?)<\\/form>`,
-    "i",
-  );
-  const m = html.match(re);
-  return m ? extractInputsFromBlock(m[1]) : {};
-}
-
-/** Extracts every <form name="X">...</form> block plus the HTML right
- *  before it (used as a fallback context to hunt for a nearby title). */
-function extractFormsWithContext(html, formName, contextChars = 400) {
-  const results = [];
-  const openRe = new RegExp(`<form[^>]*name=["']${formName}["'][^>]*>`, "gi");
-  let m;
-  while ((m = openRe.exec(html)) !== null) {
-    const openStart = m.index;
-    const openEnd = openRe.lastIndex;
-    const closeIdx = html.indexOf("</form>", openEnd);
-    if (closeIdx === -1) continue;
-    results.push({
-      inner: html.slice(openEnd, closeIdx),
-      before: html.slice(Math.max(0, openStart - contextChars), openStart),
-    });
-    openRe.lastIndex = closeIdx + 7;
-  }
-  return results;
-}
-
-function findNearbyHeading(text) {
-  const re = /<(h3|h4|h5|p)[^>]*>([\s\S]*?)<\/\1>/gi;
-  let m;
-  let last = "";
-  while ((m = re.exec(text)) !== null) {
-    const clean = stripHtml(m[2]);
-    if (clean) last = clean;
-  }
-  return last;
-}
-
-function matchFirstTag(html, tag) {
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
-  const m = html.match(re);
-  return m ? stripHtml(m[1]) : "";
-}
-
-function extractAnchors(html) {
-  const out = [];
-  const re = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    out.push({ href: m[1].trim(), text: stripHtml(m[2]) });
-  }
-  return out;
-}
-
-function extractImgSrc(html) {
-  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return m ? m[1] : "";
 }
