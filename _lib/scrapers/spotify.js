@@ -1,4 +1,3 @@
-import "../utils/domPolyfill.js";
 import {
   CHROME_UA,
   getCookiesFromHeaders,
@@ -233,7 +232,6 @@ export async function scrapeSpotify(url) {
     let cookies = "";
     let baseData = {};
     const now = Date.now();
-    const parser = new DOMParser();
 
     if (_spSessionCache && now - _spSessionCache.time < 5 * 60 * 1000) {
       cookies = _spSessionCache.cookies;
@@ -250,13 +248,10 @@ export async function scrapeSpotify(url) {
       currentStatus = r1.status;
       cookies = getCookiesFromHeaders(r1.headers);
 
-      const doc1 = parser.parseFromString(r1.data, "text/html");
-      const form = doc1.querySelector('form[name="spotifyurl"]');
-      form?.querySelectorAll("input").forEach((input) => {
-        const name = input.getAttribute("name");
-        const value = input.getAttribute("value") || "";
-        if (name && name !== "url") baseData[name] = value;
-      });
+      const formInputs = extractFirstFormInputs(r1.data, "spotifyurl");
+      for (const [name, value] of Object.entries(formInputs)) {
+        if (name !== "url") baseData[name] = value;
+      }
       _spSessionCache = { cookies, baseData, time: now };
     }
 
@@ -296,8 +291,7 @@ export async function scrapeSpotify(url) {
     }
 
     let finalHtml = r2Data.data || r2Data;
-    const doc2 = parser.parseFromString(finalHtml, "text/html");
-    const forms2 = doc2.querySelectorAll('form[name="submitspurl"]');
+    const forms2 = extractFormsWithContext(finalHtml, "submitspurl");
 
     const downloads = [];
     const r3Headers = {
@@ -312,13 +306,8 @@ export async function scrapeSpotify(url) {
     const isMultiTrack = forms2.length > 1;
 
     for (let i = 0; i < forms2.length; i++) {
-      const form2 = forms2[i];
-      const data2 = {};
-      form2.querySelectorAll("input").forEach((input) => {
-        const name = input.getAttribute("name");
-        const value = input.getAttribute("value") || "";
-        if (name) data2[name] = value;
-      });
+      const { inner, before } = forms2[i];
+      const data2 = extractInputsFromBlock(inner);
       data2["g-recaptcha-response"] = "dummy_token";
       const payloadStr = serializeData(data2);
 
@@ -326,9 +315,9 @@ export async function scrapeSpotify(url) {
         ? `${(i + 1).toString().padStart(String(forms2.length).length, "0")}. `
         : "";
 
-      // Extract track title from base64 data input or form container
+      // Extract track title from base64 data input, or nearby heading as fallback
       let itemTitle = "";
-      const dataVal = form2.querySelector('input[name="data"]')?.value;
+      const dataVal = data2["data"];
       if (dataVal) {
         try {
           const dec = JSON.parse(atob(dataVal));
@@ -339,13 +328,7 @@ export async function scrapeSpotify(url) {
         } catch (e) {}
       }
       if (!itemTitle) {
-        const container =
-          form2.closest(".col-md-4, .col-sm-6, .card, .row, div") ||
-          form2.parentElement;
-        if (container) {
-          const h = container.querySelector("h3, h4, h5, .title, p");
-          if (h && h.textContent.trim()) itemTitle = h.textContent.trim();
-        }
+        itemTitle = findNearbyHeading(before);
       }
 
       if (i === 0 && !isMultiTrack) {
@@ -368,27 +351,24 @@ export async function scrapeSpotify(url) {
             } catch (e) {}
           }
           const trackHtml = r3Data.data || r3Data;
-          const doc3 = parser.parseFromString(trackHtml, "text/html");
 
-          doc3.querySelectorAll("a").forEach((a) => {
-            const link = a.getAttribute("href");
-            const text = a.textContent.trim();
+          const trackTitle = matchFirstTag(trackHtml, "h3");
+          const artist = matchFirstTag(trackHtml, "p");
+
+          extractAnchors(trackHtml).forEach(({ href, text }) => {
             if (
-              link &&
-              link.startsWith("http") &&
-              !link.includes("premium.html") &&
+              href &&
+              href.startsWith("http") &&
+              !href.includes("premium.html") &&
               text !== "Download Another Song"
             ) {
-              const trackTitle =
-                doc3.querySelector("h3")?.textContent?.trim() || "";
-              const artist = doc3.querySelector("p")?.textContent?.trim() || "";
               const fullLabel =
                 artist && trackTitle
                   ? `${artist} - ${trackTitle}`
                   : trackTitle || text || "MP3";
 
               const isCover =
-                text.toLowerCase().includes("cover") || link.includes("cover");
+                text.toLowerCase().includes("cover") || href.includes("cover");
               const typeLabel = isCover ? "[Cover]" : "[MP3]";
 
               downloads.push({
@@ -397,7 +377,7 @@ export async function scrapeSpotify(url) {
                   : isCover
                     ? "Cover"
                     : "MP3",
-                url: link,
+                url: href,
               });
             }
           });
@@ -432,10 +412,9 @@ export async function scrapeSpotify(url) {
       return 0;
     });
 
-    const title =
-      doc2.querySelector("h3")?.textContent?.trim() || "Spotify Track";
-    const artist = doc2.querySelector("p")?.textContent?.trim();
-    const thumbnail = doc2.querySelector("img")?.getAttribute("src");
+    const title = matchFirstTag(finalHtml, "h3") || "Spotify Track";
+    const artist = matchFirstTag(finalHtml, "p");
+    const thumbnail = extractImgSrc(finalHtml);
 
     _spSource = null;
     return createScraperResult(true, {
@@ -580,3 +559,79 @@ function stripHtml(s) {
     .trim();
 }
 
+/* ---------- Regex-based mini "DOM" helpers (no DOMParser needed) ---------- */
+
+function extractInputsFromBlock(html) {
+  const inputs = {};
+  const inputRe = /<input\b[^>]*>/gi;
+  let m;
+  while ((m = inputRe.exec(html)) !== null) {
+    const tag = m[0];
+    const nameM = tag.match(/name=["']([^"']*)["']/i);
+    if (!nameM) continue;
+    const valueM = tag.match(/value=["']([^"']*)["']/i);
+    inputs[nameM[1]] = valueM ? valueM[1] : "";
+  }
+  return inputs;
+}
+
+function extractFirstFormInputs(html, formName) {
+  const re = new RegExp(
+    `<form[^>]*name=["']${formName}["'][^>]*>([\\s\\S]*?)<\\/form>`,
+    "i",
+  );
+  const m = html.match(re);
+  return m ? extractInputsFromBlock(m[1]) : {};
+}
+
+/** Extracts every <form name="X">...</form> block plus the HTML right
+ *  before it (used as a fallback context to hunt for a nearby title). */
+function extractFormsWithContext(html, formName, contextChars = 400) {
+  const results = [];
+  const openRe = new RegExp(`<form[^>]*name=["']${formName}["'][^>]*>`, "gi");
+  let m;
+  while ((m = openRe.exec(html)) !== null) {
+    const openStart = m.index;
+    const openEnd = openRe.lastIndex;
+    const closeIdx = html.indexOf("</form>", openEnd);
+    if (closeIdx === -1) continue;
+    results.push({
+      inner: html.slice(openEnd, closeIdx),
+      before: html.slice(Math.max(0, openStart - contextChars), openStart),
+    });
+    openRe.lastIndex = closeIdx + 7;
+  }
+  return results;
+}
+
+function findNearbyHeading(text) {
+  const re = /<(h3|h4|h5|p)[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m;
+  let last = "";
+  while ((m = re.exec(text)) !== null) {
+    const clean = stripHtml(m[2]);
+    if (clean) last = clean;
+  }
+  return last;
+}
+
+function matchFirstTag(html, tag) {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const m = html.match(re);
+  return m ? stripHtml(m[1]) : "";
+}
+
+function extractAnchors(html) {
+  const out = [];
+  const re = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    out.push({ href: m[1].trim(), text: stripHtml(m[2]) });
+  }
+  return out;
+}
+
+function extractImgSrc(html) {
+  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return m ? m[1] : "";
+}
