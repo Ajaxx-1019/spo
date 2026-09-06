@@ -1,12 +1,6 @@
 {
   "version": 2,
   "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/api/search",
-      "destination": "/api/spotify"
-    }
-  ],
   "headers": [
     {
       "source": "/api/(.*)",
