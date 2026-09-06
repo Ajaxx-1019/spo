@@ -2,25 +2,16 @@ export const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
 /**
- * Pull a "Cookie:"-ready string out of a fetch Response's headers.
- * Handles both the modern multi-value getSetCookie() (Node 18.14+/20+)
- * and the older combined single-string fallback.
+ * Pull a "Cookie:"-ready string out of an axios response's headers
+ * (axios exposes "set-cookie" as a plain array under a lowercase key).
  */
 export function getCookiesFromHeaders(headers) {
   if (!headers) return "";
 
-  let raw = [];
+  const raw = headers["set-cookie"] || headers["Set-Cookie"] || [];
+  const arr = Array.isArray(raw) ? raw : [raw];
 
-  if (typeof headers.getSetCookie === "function") {
-    raw = headers.getSetCookie();
-  } else if (typeof headers.get === "function") {
-    const single = headers.get("set-cookie");
-    if (single) raw = single.split(/,(?=[^;]+=[^;]+)/); // best-effort split
-  } else if (Array.isArray(headers)) {
-    raw = headers;
-  }
-
-  return raw
+  return arr
     .map((c) => c.split(";")[0].trim())
     .filter(Boolean)
     .join("; ");
@@ -42,4 +33,3 @@ export function cleanUrl(url) {
     return url;
   }
 }
-
