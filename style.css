@@ -22,49 +22,20 @@ h1{
     margin-bottom:20px;
 }
 
-/* ---------- Tabs ---------- */
-
-.tabs{
-    display:flex;
-    gap:8px;
-    margin-bottom:18px;
-    background:#181818;
-    padding:6px;
-    border-radius:14px;
-}
-
-.tab-btn{
-    flex:1;
-    padding:11px;
-    border:none;
-    border-radius:10px;
-    background:transparent;
-    color:#bbb;
-    font-weight:bold;
-    cursor:pointer;
-}
-
-.tab-btn.active{
-    background:#1DB954;
-    color:#fff;
-}
-
-.tab-panel{
-    display:none;
-}
-
-.tab-panel.active{
-    display:block;
-}
-
 /* ---------- Search ---------- */
 
 .search{
     display:flex;
     gap:10px;
+    margin-bottom:10px;
 }
 
-input{
+.search-row2{
+    display:flex;
+    gap:10px;
+}
+
+input, select{
     flex:1;
     padding:13px;
     border:none;
@@ -72,6 +43,11 @@ input{
     background:#222;
     color:#fff;
     outline:none;
+}
+
+select{
+    flex:none;
+    width:180px;
 }
 
 button{
@@ -88,65 +64,9 @@ button:hover{
     opacity:.9;
 }
 
-/* ---------- Single song result ---------- */
+/* ---------- Result header (cover + title of track/playlist/album) ---------- */
 
-.card{
-    margin-top:25px;
-    background:#181818;
-    border-radius:18px;
-    padding:20px;
-    text-align:center;
-    box-shadow:0 0 15px rgba(0,0,0,.3);
-}
-
-.cover{
-    width:220px;
-    height:220px;
-    object-fit:cover;
-    border-radius:18px;
-    margin-bottom:15px;
-}
-
-.card h2{
-    margin:8px 0;
-}
-
-.card p{
-    color:#bbb;
-    margin:5px 0;
-}
-
-.card-actions{
-    display:flex;
-    justify-content:center;
-    gap:8px;
-    margin-top:15px;
-    flex-wrap:wrap;
-}
-
-.btn{
-    display:inline-block;
-    padding:12px 18px;
-    border-radius:10px;
-    background:#1DB954;
-    color:white;
-    text-decoration:none;
-    font-weight:bold;
-    border:none;
-    cursor:pointer;
-}
-
-.spotify{
-    background:#2a2a2a;
-}
-
-.btn:hover{
-    opacity:.9;
-}
-
-/* ---------- Playlist ---------- */
-
-.playlist-header{
+.result-header{
     display:flex;
     align-items:center;
     gap:15px;
@@ -156,22 +76,27 @@ button:hover{
     padding:15px;
 }
 
-.playlist-header img{
+.result-header img{
     width:80px;
     height:80px;
     border-radius:10px;
     object-fit:cover;
+    background:#222;
+    flex-shrink:0;
 }
 
-.playlist-header .pl-meta strong{
+.result-header .r-meta strong{
     display:block;
-    font-size:1.1em;
+    font-size:1.05em;
+    word-break:break-word;
 }
 
-.playlist-header .pl-meta span{
+.result-header .r-meta span{
     color:#999;
-    font-size:.9em;
+    font-size:.85em;
 }
+
+/* ---------- Playlist / track-list actions ---------- */
 
 .playlist-actions{
     display:none;
@@ -198,6 +123,8 @@ button:hover{
     background:#1DB954;
 }
 
+/* ---------- Track list ---------- */
+
 .track-list{
     margin-top:16px;
     display:flex;
@@ -211,7 +138,7 @@ button:hover{
     gap:12px;
     background:#181818;
     border-radius:12px;
-    padding:10px;
+    padding:12px 14px;
     cursor:pointer;
 }
 
@@ -224,29 +151,10 @@ button:hover{
     border:1px solid #1DB954;
 }
 
-.track-item img{
-    width:52px;
-    height:52px;
-    border-radius:8px;
-    object-fit:cover;
-    flex-shrink:0;
-}
-
 .track-meta{
     flex:1;
     min-width:0;
-}
-
-.track-meta .t-title{
-    font-weight:bold;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-
-.track-meta .t-sub{
-    color:#999;
-    font-size:.85em;
+    font-size:.92em;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
@@ -259,6 +167,7 @@ button:hover{
     font-size:1.3em;
     padding:6px 10px;
     cursor:pointer;
+    flex-shrink:0;
 }
 
 .msg{
@@ -267,7 +176,7 @@ button:hover{
     margin-top:20px;
 }
 
-/* ---------- Custom player bar (replaces the ugly native white audio UI) ---------- */
+/* ---------- Custom player bar ---------- */
 
 .player{
     position:fixed;
@@ -300,15 +209,7 @@ button:hover{
 
 .player-title{
     font-weight:bold;
-    font-size:.95em;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-}
-
-.player-artist{
-    color:#999;
-    font-size:.8em;
+    font-size:.9em;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
@@ -327,7 +228,6 @@ button:hover{
     min-width:32px;
 }
 
-/* Custom dark range slider so nothing renders as a plain white bar */
 .seek{
     -webkit-appearance:none;
     appearance:none;
@@ -395,6 +295,7 @@ button:hover{
 }
 
 @media (max-width:480px){
-    .player-artist{ display:none; }
     .player-cover{ width:42px; height:42px; }
+    .search-row2{ flex-wrap:wrap; }
+    select{ width:100%; }
 }
