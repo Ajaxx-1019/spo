@@ -1,4 +1,4 @@
-import { resolveTrackDownload } from "./_lib/musicfab.js";
+import { resolveSpotifyDownload } from "../lib/scrapers/spotifyResolve.js";
 
 export default async function handler(req, res) {
 
@@ -10,36 +10,31 @@ export default async function handler(req, res) {
   }
 
   try {
+    const token = (req.query.token || "").trim();
 
-    const url = (req.query.url || "").trim();
-
-    if (!url) {
+    if (!token) {
       return res.status(400).json({
         status: false,
-        message: "Parameter url wajib diisi."
+        message: "Parameter token wajib diisi.",
       });
     }
 
-    let info;
+    let directUrl;
     try {
-      info = await resolveTrackDownload(url);
+      const resolved = await resolveSpotifyDownload(token);
+      directUrl = resolved.url;
     } catch (err) {
-      return res.status(502).json({
-        status: false,
-        message: err.message,
-        upstream_status: err.upstream_status,
-        upstream_body: err.upstream_body
-      });
+      return res.status(502).json({ status: false, message: err.message });
     }
 
-    const mp3 = await fetch(info.download_url, {
-      headers: { "User-Agent": "Mozilla/5.0" }
+    const mp3 = await fetch(directUrl, {
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
 
     if (!mp3.ok) {
       return res.status(500).json({
         status: false,
-        message: "Gagal mengambil file MP3."
+        message: "Gagal mengambil file MP3.",
       });
     }
 
@@ -53,7 +48,7 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({
       status: false,
-      message: err.message
+      message: err.message,
     });
   }
 }
