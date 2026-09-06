@@ -2,158 +2,105 @@
 
 const audio = document.getElementById("audio");
 
-let queue = [];          // array of track objects currently loaded for playback
-let queueIndex = -1;     // index of the track currently playing in `queue`
+let queue = [];          // tracks currently loaded for playback: {label, token}
+let queueIndex = -1;
 let shuffleOn = false;
-let baseOrder = [];      // the playlist tracks in their original order
-let shuffledOrder = [];  // smart-shuffled version of baseOrder
+let baseOrder = [];       // tracks in original order
+let shuffledOrder = [];   // smart-shuffled version
+let resultTitle = "";
+let resultThumb = "";
 
-/* ==================== Tabs ==================== */
+/* ==================== Search ==================== */
 
-function switchTab(tab) {
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-    document.getElementById("tab-song").classList.toggle("active", tab === "song");
-    document.getElementById("tab-playlist").classList.toggle("active", tab === "playlist");
-}
-
-/* ==================== Single song search ==================== */
-
-const input = document.getElementById("q");
-const result = document.getElementById("result");
-
-async function searchSong() {
-
-    const keyword = input.value.trim();
-
-    if (!keyword) {
-        alert("Masukkan judul lagu.");
-        return;
-    }
-
-    result.innerHTML = "<h3 class='msg'>Mencari...</h3>";
-
-    try {
-
-        const res = await fetch("/api/search?q=" + encodeURIComponent(keyword));
-        const data = await res.json();
-
-        if (!data.status) {
-            result.innerHTML = "<h3 class='msg'>Lagu tidak ditemukan.</h3>";
-            return;
-        }
-
-        const track = {
-            title: data.title,
-            artist: data.artist,
-            album: data.album,
-            duration: data.duration,
-            cover: data.thumbnail,
-            query: keyword,
-            spotify_url: data.spotify_url
-        };
-
-        result.innerHTML = `
-        <div class="card">
-
-            <img src="${track.cover}" class="cover">
-
-            <h2>${track.title}</h2>
-
-            <p>${track.artist}</p>
-
-            <p>Album : ${track.album}</p>
-
-            <p>Durasi : ${track.duration}</p>
-
-            <div class="card-actions">
-                <button class="btn" onclick='playTrackNow(${JSON.stringify(track)})'>▶ Putar</button>
-                <button class="btn" onclick='downloadTrack(${JSON.stringify(track)})'>⬇ Download MP3</button>
-                <a class="btn spotify" target="_blank" href="${track.spotify_url}">🎵 Spotify</a>
-            </div>
-
-        </div>
-        `;
-
-    } catch (err) {
-        result.innerHTML = "<h3 class='msg'>" + err.message + "</h3>";
-    }
-}
-
-function playTrackNow(track) {
-    queue = [track];
-    queueIndex = 0;
-    loadAndPlay();
-}
-
-/* ==================== Playlist ==================== */
-
-const plUrlInput = document.getElementById("plUrl");
-const playlistHeader = document.getElementById("playlistHeader");
-const playlistActions = document.getElementById("playlistActions");
-const playlistTracks = document.getElementById("playlistTracks");
+const linkInput = document.getElementById("link");
+const sourceSelect = document.getElementById("source");
+const resultHeader = document.getElementById("resultHeader");
+const listActions = document.getElementById("listActions");
+const trackListEl = document.getElementById("trackList");
 const shuffleBtn = document.getElementById("shuffleBtn");
 
-async function searchPlaylist() {
+async function searchLink() {
 
-    const url = plUrlInput.value.trim();
+    const url = linkInput.value.trim();
+    const source = sourceSelect.value;
 
     if (!url) {
-        alert("Tempel link playlist Spotify dulu.");
+        alert("Tempel link Spotify dulu.");
         return;
     }
 
-    playlistHeader.innerHTML = "<p class='msg'>Memuat playlist...</p>";
-    playlistTracks.innerHTML = "";
-    playlistActions.classList.remove("show");
+    resultHeader.innerHTML = "<p class='msg'>Mencari...</p>";
+    listActions.classList.remove("show");
+    trackListEl.innerHTML = "";
 
     try {
 
-        const res = await fetch("/api/playlist?url=" + encodeURIComponent(url));
+        const res = await fetch(
+            "/api/spotify-search?url=" + encodeURIComponent(url) +
+            "&source=" + encodeURIComponent(source)
+        );
         const data = await res.json();
 
         if (!data.status) {
-            playlistHeader.innerHTML = `<p class="msg">${data.message || "Playlist tidak ditemukan."}</p>`;
+            resultHeader.innerHTML = `<p class="msg">${data.message || "Gagal mengambil data."}</p>`;
             return;
         }
 
-        // tandai track playlist sebagai "viaUrl" — play/download-nya
-        // lewat musicfab (resolve by spotify_url), beda jalur dari tab
-        // Cari Lagu yang masih pakai nexadev (search by text query)
-        baseOrder = data.tracks.map(t => ({ ...t, viaUrl: true }));
+        resultTitle = data.title || "Spotify";
+        resultThumb = data.thumbnail || "";
+
+        // filter out cover-image entries, keep audio tracks only
+        const rawTracks = (data.downloads || []).filter(
+            (d) => !isCoverLabel(d.type)
+        );
+
+        if (!rawTracks.length) {
+            resultHeader.innerHTML = "<p class='msg'>Gak ada lagu yang ketemu.</p>";
+            return;
+        }
+
+        baseOrder = rawTracks.map((d) => ({ label: d.type, token: d.url }));
         shuffledOrder = smartShuffleOrder(baseOrder);
         shuffleOn = false;
         shuffleBtn.textContent = "🔀 Smart Shuffle: OFF";
         shuffleBtn.classList.remove("on");
 
-        playlistHeader.innerHTML = `
-        <div class="playlist-header">
-            <img src="${data.cover}">
-            <div class="pl-meta">
-                <strong>${data.title}</strong>
-                <span>${data.total} lagu</span>
+        resultHeader.innerHTML = `
+        <div class="result-header">
+            <img src="${resultThumb}" onerror="this.style.visibility='hidden'">
+            <div class="r-meta">
+                <strong>${resultTitle}</strong>
+                <span>${baseOrder.length} lagu</span>
             </div>
         </div>
         `;
 
-        playlistActions.classList.add("show");
+        listActions.classList.add("show");
         renderTrackList();
 
     } catch (err) {
-        playlistHeader.innerHTML = `<p class="msg">${err.message}</p>`;
+        resultHeader.innerHTML = `<p class="msg">${err.message}</p>`;
     }
 }
 
-function renderTrackList() {
+function isCoverLabel(label) {
+    return /\[cover\]/i.test(label || "") || (label || "").toLowerCase() === "cover";
+}
 
+function extractArtist(label) {
+    let s = (label || "").replace(/^\d+\.\s*/, "").replace(/\s*\[[^\]]*\]\s*$/, "");
+    const idx = s.indexOf(" - ");
+    return idx !== -1 ? s.slice(0, idx).trim() : s.trim();
+}
+
+/* ==================== Track list rendering ==================== */
+
+function renderTrackList() {
     const order = shuffleOn ? shuffledOrder : baseOrder;
 
-    playlistTracks.innerHTML = order.map((t, i) => `
+    trackListEl.innerHTML = order.map((t, i) => `
         <div class="track-item" data-qidx="${i}" onclick="playFromOrder(${i})">
-            <img src="${t.cover}">
-            <div class="track-meta">
-                <div class="t-title">${t.title}</div>
-                <div class="t-sub">${t.artist} · ${t.duration}</div>
-            </div>
+            <div class="track-meta">${t.label}</div>
             <button class="track-dl" title="Unduh MP3" onclick="event.stopPropagation(); downloadTrack(${JSON.stringify(t)})">⬇</button>
         </div>
     `).join("");
@@ -168,7 +115,7 @@ function playFromOrder(i) {
 
 function playAllFromStart() {
     if (!baseOrder.length) {
-        alert("Muat playlist dulu.");
+        alert("Cari link dulu.");
         return;
     }
     playFromOrder(0);
@@ -179,15 +126,12 @@ function toggleShuffle() {
     shuffleBtn.textContent = shuffleOn ? "🔀 Smart Shuffle: ON" : "🔀 Smart Shuffle: OFF";
     shuffleBtn.classList.toggle("on", shuffleOn);
 
-    // re-roll a fresh smart shuffle each time it's turned on
     if (shuffleOn) shuffledOrder = smartShuffleOrder(baseOrder);
 
-    // if something from this playlist is currently playing, keep playing
-    // the same track but re-point the queue to the new order
     if (queue === baseOrder || queue === shuffledOrder) {
         const currentTrack = queue[queueIndex];
         queue = shuffleOn ? shuffledOrder : baseOrder;
-        queueIndex = queue.findIndex(t => t.query === currentTrack?.query);
+        queueIndex = queue.findIndex((t) => t.token === currentTrack?.token);
         if (queueIndex === -1) queueIndex = 0;
     }
 
@@ -196,28 +140,30 @@ function toggleShuffle() {
 }
 
 /**
- * "Smart" shuffle: a plain random shuffle would happily put the same
- * artist back to back or cluster tracks from the same album. This does
- * a Fisher-Yates shuffle and then repairs the order so consecutive
- * tracks never share the same artist when it's avoidable.
+ * "Smart" shuffle: plain random shuffle would happily put the same
+ * artist back to back. This does a Fisher-Yates shuffle then repairs
+ * the order so consecutive tracks don't share an artist when avoidable.
+ * Artist is heuristically extracted from the "NN. Artist - Title [MP3]"
+ * label since that's all the scraper gives us for playlist items.
  */
 function smartShuffleOrder(tracks) {
-
     const arr = [...tracks];
 
-    // Fisher-Yates
     for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
     }
 
-    // repair consecutive same-artist collisions
     for (let i = 1; i < arr.length; i++) {
-        if (arr[i].artist === arr[i - 1].artist) {
+        const artistI = extractArtist(arr[i].label);
+        const artistPrev = extractArtist(arr[i - 1].label);
+        if (artistI && artistI === artistPrev) {
             let swapWith = -1;
             for (let j = i + 1; j < arr.length; j++) {
-                const okWithPrev = arr[j].artist !== arr[i - 1].artist;
-                const okWithNext = i + 1 >= arr.length || arr[j].artist !== arr[i + 1]?.artist;
+                const artistJ = extractArtist(arr[j].label);
+                const okWithPrev = artistJ !== artistPrev;
+                const nextArtist = i + 1 < arr.length ? extractArtist(arr[i + 1].label) : null;
+                const okWithNext = !nextArtist || artistJ !== nextArtist;
                 if (okWithPrev && okWithNext) {
                     swapWith = j;
                     break;
@@ -233,8 +179,8 @@ function smartShuffleOrder(tracks) {
 }
 
 function highlightPlaying() {
-    document.querySelectorAll(".track-item").forEach(el => {
-        el.classList.toggle("playing", Number(el.dataset.qidx) === queueIndex && (queue === shuffledOrder || queue === baseOrder));
+    document.querySelectorAll(".track-item").forEach((el) => {
+        el.classList.toggle("playing", Number(el.dataset.qidx) === queueIndex);
     });
 }
 
@@ -242,21 +188,17 @@ function highlightPlaying() {
 
 async function downloadTrack(track) {
     try {
-        const endpoint = track.viaUrl
-            ? "/api/resolve?url=" + encodeURIComponent(track.spotify_url)
-            : "/api/search?q=" + encodeURIComponent(track.query || track.title);
-
-        const res = await fetch(endpoint);
+        const res = await fetch("/api/spotify-resolve?token=" + encodeURIComponent(track.token));
         const data = await res.json();
 
-        if (!data.status || !data.download_url) {
+        if (!data.status || !data.url) {
             alert("Gagal mendapatkan link download.");
             return;
         }
 
         const a = document.createElement("a");
-        a.href = data.download_url;
-        a.download = `${track.title}.mp3`;
+        a.href = data.url;
+        a.download = `${cleanFilename(track.label)}.mp3`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -266,19 +208,31 @@ async function downloadTrack(track) {
     }
 }
 
+function downloadCurrent() {
+    const track = queue[queueIndex];
+    if (!track) return;
+    downloadTrack(track);
+}
+
+function cleanFilename(label) {
+    return (label || "track")
+        .replace(/^\d+\.\s*/, "")
+        .replace(/\s*\[[^\]]*\]\s*$/, "")
+        .replace(/[\\/:*?"<>|]/g, "");
+}
+
 /**
- * Download semua lagu di playlist secara berurutan dengan jeda antar
- * request, biar gak kena rate limit musicfab. Ini sengaja dijalanin
- * di browser (bukan di satu serverless function) karena Vercel punya
- * batas waktu eksekusi per request — loop dengan delay 2.5 detik x
- * puluhan lagu bisa gampang timeout kalau ditaro di server.
+ * Download semua lagu berurutan dengan jeda antar request biar gak
+ * kena rate limit di sisi SpotiDown/SoundLoaders. Sengaja jalan di
+ * browser (bukan satu serverless function panjang) karena Vercel
+ * punya batas waktu eksekusi per request.
  */
 let downloadAllRunning = false;
 
-async function downloadAllPlaylist() {
+async function downloadAllTracks() {
     if (downloadAllRunning) return;
     if (!baseOrder.length) {
-        alert("Muat playlist dulu.");
+        alert("Cari link dulu.");
         return;
     }
 
@@ -292,10 +246,10 @@ async function downloadAllPlaylist() {
         try {
             await downloadTrack(t);
         } catch {
-            // lanjut ke track berikutnya walau satu gagal
+            // lanjut walau satu track gagal
         }
         if (i < baseOrder.length - 1) {
-            await new Promise(r => setTimeout(r, 2500)); // jeda anti rate-limit
+            await new Promise((r) => setTimeout(r, 2500)); // jeda anti rate-limit
         }
     }
 
@@ -303,17 +257,10 @@ async function downloadAllPlaylist() {
     downloadAllRunning = false;
 }
 
-function downloadCurrent() {
-    const track = queue[queueIndex];
-    if (!track) return;
-    downloadTrack(track);
-}
-
 /* ==================== Custom player ==================== */
 
 const playerCover = document.getElementById("playerCover");
 const playerTitle = document.getElementById("playerTitle");
-const playerArtist = document.getElementById("playerArtist");
 const playPauseBtn = document.getElementById("playPauseBtn");
 const seek = document.getElementById("seek");
 const curTime = document.getElementById("curTime");
@@ -323,14 +270,11 @@ function loadAndPlay() {
     const track = queue[queueIndex];
     if (!track) return;
 
-    playerCover.src = track.cover || "";
-    playerTitle.textContent = track.title || "";
-    playerArtist.textContent = track.artist || "";
+    playerCover.src = resultThumb || "";
+    playerTitle.textContent = cleanFilename(track.label);
     playPauseBtn.textContent = "⏳";
 
-    audio.src = track.viaUrl
-        ? "/api/streamurl?url=" + encodeURIComponent(track.spotify_url)
-        : "/api/play?q=" + encodeURIComponent(track.query || track.title);
+    audio.src = "/api/spotify-stream?token=" + encodeURIComponent(track.token);
     audio.play().catch(() => {});
 }
 
@@ -378,7 +322,6 @@ audio.addEventListener("timeupdate", () => {
 });
 
 audio.addEventListener("ended", () => {
-    // auto-advance to the next track in the queue (playlist autoplay)
     if (queue.length > 1) {
         playNext();
     } else {
