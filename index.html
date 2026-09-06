@@ -21,40 +21,27 @@ href="style.css">
 
 <h1>Spotify Brot</h1>
 
-<div class="tabs">
-  <button class="tab-btn active" data-tab="song" onclick="switchTab('song')">Cari Lagu</button>
-  <button class="tab-btn" data-tab="playlist" onclick="switchTab('playlist')">Playlist</button>
+<div class="search">
+  <input id="link" placeholder="Tempel link Spotify (lagu/playlist/album)...">
 </div>
 
-<section id="tab-song" class="tab-panel active">
+<div class="search-row2">
+  <select id="source">
+    <option value="spotidown">Sumber: SpotiDown</option>
+    <option value="soundloaders">Sumber: SoundLoaders</option>
+  </select>
+  <button onclick="searchLink()">Cari</button>
+</div>
 
-  <div class="search">
-    <input id="q" placeholder="Cari lagu...">
-    <button onclick="searchSong()">Cari</button>
-  </div>
+<div id="resultHeader"></div>
 
-  <div id="result"></div>
+<div class="playlist-actions" id="listActions">
+  <button class="btn-action" id="shuffleBtn" onclick="toggleShuffle()">🔀 Smart Shuffle: OFF</button>
+  <button class="btn-action" onclick="playAllFromStart()">▶ Putar Semua</button>
+  <button class="btn-action" id="downloadAllBtn" onclick="downloadAllTracks()">⬇ Download Semua</button>
+</div>
 
-</section>
-
-<section id="tab-playlist" class="tab-panel">
-
-  <div class="search">
-    <input id="plUrl" placeholder="Tempel link playlist Spotify...">
-    <button onclick="searchPlaylist()">Muat</button>
-  </div>
-
-  <div id="playlistHeader"></div>
-
-  <div class="playlist-actions" id="playlistActions">
-    <button class="btn-action" id="shuffleBtn" onclick="toggleShuffle()">🔀 Smart Shuffle: OFF</button>
-    <button class="btn-action" onclick="playAllFromStart()">▶ Putar Semua</button>
-    <button class="btn-action" id="downloadAllBtn" onclick="downloadAllPlaylist()">⬇ Download Semua</button>
-  </div>
-
-  <div id="playlistTracks"></div>
-
-</section>
+<div id="trackList"></div>
 
 </div>
 
@@ -64,7 +51,6 @@ href="style.css">
 
   <div class="player-info">
     <div id="playerTitle" class="player-title">Belum ada lagu diputar</div>
-    <div id="playerArtist" class="player-artist"></div>
 
     <div class="player-progress">
       <span id="curTime" class="player-time">0:00</span>
