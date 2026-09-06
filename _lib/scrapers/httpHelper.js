@@ -1,5 +1,7 @@
+import axios from "axios";
+
 /**
- * Thin fetch wrapper used by the scrapers.
+ * Thin axios wrapper used by the scrapers.
  * - rawResponse: true  -> always returns { status, headers, data (raw text), url }
  * - rawResponse: false -> returns parsed JSON (or raw text if not JSON), throws on !ok
  */
@@ -8,38 +10,46 @@ export async function scraperFetch(opts, label = "Request") {
 
   let response;
   try {
-    response = await fetch(url, {
+    response = await axios({
+      url,
       method,
+      data,
       headers,
-      body: method !== "GET" && method !== "HEAD" ? data : undefined,
-      redirect: "follow"
+      // don't throw on non-2xx — the scrapers inspect status themselves
+      validateStatus: () => true,
+      maxRedirects: 5,
+      // keep the body as a raw string; we parse JSON ourselves so the
+      // calling code's `typeof x === "string" ? JSON.parse(x) : x`
+      // checks behave the same as they did against fetch's res.text()
+      transformResponse: [(d) => d],
     });
   } catch (err) {
     throw new Error(`${label}: network error - ${err.message}`);
   }
 
-  const text = await response.text();
+  const finalUrl =
+    response.request?.res?.responseUrl || response.config?.url || url;
 
   if (rawResponse) {
     return {
       status: response.status,
       headers: response.headers,
-      data: text,
-      url: response.url
+      data: response.data,
+      url: finalUrl,
     };
   }
 
-  if (!response.ok) {
+  if (response.status < 200 || response.status >= 300) {
     const err = new Error(`${label} failed with status ${response.status}`);
     err.status = response.status;
-    err.body = text;
+    err.body = response.data;
     throw err;
   }
 
   try {
-    return JSON.parse(text);
+    return JSON.parse(response.data);
   } catch {
-    return text;
+    return response.data;
   }
 }
 
@@ -51,6 +61,6 @@ export function createScraperResult(success, dataOrMessage, status) {
   return {
     status: false,
     message: typeof dataOrMessage === "string" ? dataOrMessage : "Terjadi kesalahan.",
-    httpStatus: status ?? null
+    httpStatus: status ?? null,
   };
 }
