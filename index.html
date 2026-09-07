@@ -4,66 +4,102 @@
 <head>
 
 <meta charset="UTF-8">
-
-<meta name="viewport"
-content="width=device-width,initial-scale=1">
-
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050912">
 <title>Spotify Brot</title>
 
-<link rel="stylesheet"
-href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css">
 
 </head>
 
 <body>
 
-<div class="container">
-
-<h1>Spotify Brot</h1>
-
-<div class="search">
-  <input id="link" placeholder="Tempel link Spotify (lagu/playlist/album)...">
+<div class="bg-field" aria-hidden="true">
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+  <div class="blob blob-c"></div>
+  <div class="grain"></div>
 </div>
 
-<div class="search-row2">
-  <select id="source">
-    <option value="spotidown">Sumber: SpotiDown</option>
-    <option value="soundloaders">Sumber: SoundLoaders</option>
-  </select>
-  <button onclick="searchLink()">Cari</button>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 15C4 15 7 12 12 12C17 12 20 15 20 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 11C6 11 8.5 8.5 12 8.5C15.5 8.5 18 11 18 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/><path d="M8.5 7.2C8.5 7.2 10 5.5 12 5.5C14 5.5 15.5 7.2 15.5 7.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.45"/><circle cx="12" cy="18.2" r="1.6" fill="currentColor"/></svg>
+      </span>
+      <span class="brand-name">Brot</span>
+    </div>
+    <div class="status-dot" title="Siap"></div>
+  </header>
+
+  <main class="stage">
+
+    <section class="hero-search">
+      <h1 class="hero-title">Tempel link Spotify-nya.</h1>
+      <p class="hero-sub">Lagu, playlist, atau album — kita ambilin.</p>
+
+      <div class="search-shell glass">
+        <span class="search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M20 20L16.2 16.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <input id="link" type="text" inputmode="url" placeholder="https://open.spotify.com/..." autocomplete="off" spellcheck="false">
+        <button class="search-go" id="searchBtn" onclick="searchLink()" aria-label="Cari">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M13 6L19 12L13 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="source-segment glass" role="tablist" aria-label="Sumber unduhan">
+        <button class="segment-opt active" data-source="spotidown" onclick="setSource('spotidown', this)" role="tab" aria-selected="true">SpotiDown</button>
+        <button class="segment-opt" data-source="soundloaders" onclick="setSource('soundloaders', this)" role="tab" aria-selected="false">SoundLoaders</button>
+        <span class="segment-thumb" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <section id="resultZone" class="result-zone"></section>
+
+    <section id="toolbarZone" class="toolbar-zone"></section>
+
+    <section id="trackZone" class="track-zone"></section>
+
+  </main>
+
 </div>
 
-<div id="resultHeader"></div>
+<div id="player" class="player glass">
 
-<div class="playlist-actions" id="listActions">
-  <button class="btn-action" id="shuffleBtn" onclick="toggleShuffle()">🔀 Smart Shuffle: OFF</button>
-  <button class="btn-action" onclick="playAllFromStart()">▶ Putar Semua</button>
-  <button class="btn-action" id="downloadAllBtn" onclick="downloadAllTracks()">⬇ Download Semua</button>
-</div>
-
-<div id="trackList"></div>
-
-</div>
-
-<div id="player" class="player">
-
-  <img id="playerCover" class="player-cover" src="" alt="">
+  <div class="player-cover-wrap">
+    <img id="playerCover" class="player-cover" src="" alt="" onerror="this.style.opacity='0'">
+    <svg class="player-cover-fallback" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg>
+  </div>
 
   <div class="player-info">
-    <div id="playerTitle" class="player-title">Belum ada lagu diputar</div>
-
+    <div id="playerTitle" class="player-title">Belum ada yang diputar</div>
     <div class="player-progress">
       <span id="curTime" class="player-time">0:00</span>
-      <input type="range" id="seek" class="seek" min="0" max="100" value="0">
+      <input type="range" id="seek" class="seek" min="0" max="100" value="0" aria-label="Posisi lagu">
       <span id="durTime" class="player-time">0:00</span>
     </div>
   </div>
 
   <div class="player-controls">
-    <button id="prevBtn" class="ctrl-btn" onclick="playPrev()" title="Sebelumnya">⏮</button>
-    <button id="playPauseBtn" class="ctrl-btn play" onclick="togglePlay()" title="Putar/Jeda">▶</button>
-    <button id="nextBtn" class="ctrl-btn" onclick="playNext()" title="Berikutnya">⏭</button>
-    <button id="downloadBtn" class="ctrl-btn" onclick="downloadCurrent()" title="Unduh MP3">⬇</button>
+    <button id="prevBtn" class="ctrl-btn" onclick="playPrev()" aria-label="Sebelumnya">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L9.5 12L18 18V6Z" fill="currentColor"/><rect x="6" y="6" width="1.8" height="12" rx="0.9" fill="currentColor"/></svg>
+    </button>
+    <button id="playPauseBtn" class="ctrl-btn play" onclick="togglePlay()" aria-label="Putar">
+      <svg class="icon-play" viewBox="0 0 24 24" fill="none"><path d="M8 5.5V18.5L19 12L8 5.5Z" fill="currentColor"/></svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" fill="none" style="display:none"><rect x="7" y="5.5" width="3.6" height="13" rx="1.2" fill="currentColor"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1.2" fill="currentColor"/></svg>
+    </button>
+    <button id="nextBtn" class="ctrl-btn" onclick="playNext()" aria-label="Berikutnya">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 6L14.5 12L6 18V6Z" fill="currentColor"/><rect x="16.2" y="6" width="1.8" height="12" rx="0.9" fill="currentColor"/></svg>
+    </button>
+    <button id="downloadBtn" class="ctrl-btn ghost" onclick="downloadCurrent()" aria-label="Unduh MP3">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 4V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 11L12 15.5L16.5 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18.5H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
   </div>
 
 </div>
