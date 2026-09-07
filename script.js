@@ -1,86 +1,111 @@
+/* ==================== Icons (inline SVG strings) ==================== */
+
+const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" fill="none"><path d="M12 4V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M7.5 11L12 15.5L16.5 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18.5H19" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+
+const ICON_SHUFFLE = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 6H7.5L14 18H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18H7.5L9.2 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 6H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M17.5 3.5L20.5 6L17.5 8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 15.5L20.5 18L17.5 20.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+const ICON_PLAYALL = `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.6"/><path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="currentColor"/></svg>`;
+
+const ICON_TRACKS = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 7H20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4 12H20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M4 17H14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+const ICON_EQ = `<svg class="eq" viewBox="0 0 16 16" fill="none"><rect class="eq-b1" x="2" y="6" width="2.6" height="8" rx="1" fill="currentColor"/><rect class="eq-b2" x="6.7" y="2" width="2.6" height="12" rx="1" fill="currentColor"/><rect class="eq-b3" x="11.4" y="8" width="2.6" height="6" rx="1" fill="currentColor"/></svg>`;
+
 /* ==================== Global state ==================== */
 
 const audio = document.getElementById("audio");
 
-let queue = [];          // tracks currently loaded for playback: {label, token}
+let queue = [];
 let queueIndex = -1;
 let shuffleOn = false;
-let baseOrder = [];       // tracks in original order
-let shuffledOrder = [];   // smart-shuffled version
+let baseOrder = [];
+let shuffledOrder = [];
 let resultTitle = "";
 let resultThumb = "";
+let sourceSelected = "spotidown";
+
+/* ==================== Source segmented control ==================== */
+
+function setSource(name, btnEl) {
+    sourceSelected = name;
+    document.querySelectorAll(".segment-opt").forEach((b) => {
+        b.classList.toggle("active", b === btnEl);
+        b.setAttribute("aria-selected", b === btnEl ? "true" : "false");
+    });
+}
 
 /* ==================== Search ==================== */
 
 const linkInput = document.getElementById("link");
-const sourceSelect = document.getElementById("source");
-const resultHeader = document.getElementById("resultHeader");
-const listActions = document.getElementById("listActions");
-const trackListEl = document.getElementById("trackList");
-const shuffleBtn = document.getElementById("shuffleBtn");
+const searchBtn = document.getElementById("searchBtn");
+const resultZone = document.getElementById("resultZone");
+const toolbarZone = document.getElementById("toolbarZone");
+const trackZone = document.getElementById("trackZone");
 
 async function searchLink() {
 
     const url = linkInput.value.trim();
-    const source = sourceSelect.value;
 
     if (!url) {
-        alert("Tempel link Spotify dulu.");
+        linkInput.focus();
         return;
     }
 
-    resultHeader.innerHTML = "<p class='msg'>Mencari...</p>";
-    listActions.classList.remove("show");
-    trackListEl.innerHTML = "";
+    searchBtn.classList.add("loading");
+    resultZone.innerHTML = `
+        <div class="skeleton-hero glass">
+            <div class="skeleton-box skeleton-cover"></div>
+            <div class="skeleton-lines">
+                <div class="skeleton-line w60"></div>
+                <div class="skeleton-line w35"></div>
+            </div>
+        </div>
+    `;
+    toolbarZone.innerHTML = "";
+    trackZone.innerHTML = "";
 
     try {
 
         const res = await fetch(
             "/api/spotify-search?url=" + encodeURIComponent(url) +
-            "&source=" + encodeURIComponent(source)
+            "&source=" + encodeURIComponent(sourceSelected)
         );
         const data = await res.json();
 
+        searchBtn.classList.remove("loading");
+
         if (!data.status) {
-            resultHeader.innerHTML = `<p class="msg">${data.message || "Gagal mengambil data."}</p>`;
+            resultZone.innerHTML = `<div class="state-msg">${escapeHtml(data.message || "Gagal mengambil data.")}</div>`;
             return;
         }
 
         resultTitle = data.title || "Spotify";
         resultThumb = data.thumbnail || "";
 
-        // filter out cover-image entries, keep audio tracks only
-        const rawTracks = (data.downloads || []).filter(
-            (d) => !isCoverLabel(d.type)
-        );
+        const rawTracks = (data.downloads || []).filter((d) => !isCoverLabel(d.type));
 
         if (!rawTracks.length) {
-            resultHeader.innerHTML = "<p class='msg'>Gak ada lagu yang ketemu.</p>";
+            resultZone.innerHTML = `<div class="state-msg">Gak ada lagu yang ketemu di link itu.</div>`;
             return;
         }
 
         baseOrder = rawTracks.map((d) => ({ label: d.type, token: d.url }));
         shuffledOrder = smartShuffleOrder(baseOrder);
         shuffleOn = false;
-        shuffleBtn.textContent = "🔀 Smart Shuffle: OFF";
-        shuffleBtn.classList.remove("on");
 
-        resultHeader.innerHTML = `
-        <div class="result-header">
-            <img src="${resultThumb}" onerror="this.style.visibility='hidden'">
-            <div class="r-meta">
-                <strong>${resultTitle}</strong>
-                <span>${baseOrder.length} lagu</span>
-            </div>
-        </div>
-        `;
-
-        listActions.classList.add("show");
+        renderResultHero();
+        renderToolbar();
         renderTrackList();
 
     } catch (err) {
-        resultHeader.innerHTML = `<p class="msg">${err.message}</p>`;
+        searchBtn.classList.remove("loading");
+        resultZone.innerHTML = `<div class="state-msg">${escapeHtml(err.message)}</div>`;
     }
+}
+
+function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
 }
 
 function isCoverLabel(label) {
@@ -93,18 +118,60 @@ function extractArtist(label) {
     return idx !== -1 ? s.slice(0, idx).trim() : s.trim();
 }
 
-/* ==================== Track list rendering ==================== */
+function cleanFilename(label) {
+    return (label || "track")
+        .replace(/^\d+\.\s*/, "")
+        .replace(/\s*\[[^\]]*\]\s*$/, "")
+        .replace(/[\\/:*?"<>|]/g, "");
+}
+
+/* ==================== Rendering ==================== */
+
+function renderResultHero() {
+    resultZone.innerHTML = `
+        <div class="result-hero glass">
+            <div class="cover-glow"></div>
+            <img class="result-cover" src="${resultThumb}" alt="" onerror="this.style.visibility='hidden'">
+            <div class="result-meta">
+                <strong>${escapeHtml(resultTitle)}</strong>
+                <div class="meta-row">${ICON_TRACKS}<span>${baseOrder.length} lagu</span></div>
+            </div>
+        </div>
+    `;
+}
+
+function renderToolbar() {
+    toolbarZone.innerHTML = `
+        <button class="pill-btn glass ${shuffleOn ? "active" : ""}" id="shuffleBtn" onclick="toggleShuffle()">
+            ${ICON_SHUFFLE}<span>Shuffle Pintar</span>
+        </button>
+        <button class="pill-btn glass" onclick="playAllFromStart()">
+            ${ICON_PLAYALL}<span>Putar Semua</span>
+        </button>
+        <button class="pill-btn glass" id="downloadAllBtn" onclick="downloadAllTracks()">
+            ${ICON_DOWNLOAD}<span>Download Semua</span>
+        </button>
+    `;
+}
 
 function renderTrackList() {
     const order = shuffleOn ? shuffledOrder : baseOrder;
 
-    trackListEl.innerHTML = order.map((t, i) => `
-        <div class="track-item" data-qidx="${i}" onclick="playFromOrder(${i})">
-            <div class="track-meta">${t.label}</div>
-            <button class="track-dl" title="Unduh MP3" onclick="event.stopPropagation(); downloadTrack(${JSON.stringify(t)})">⬇</button>
+    trackZone.innerHTML = order.map((t, i) => `
+        <div class="track-row" data-qidx="${i}" data-token="${escapeHtml(t.token)}" style="animation-delay:${Math.min(i * 28, 380)}ms" onclick="playFromOrder(${i})">
+            <span class="track-index">
+                <span>${i + 1}</span>
+                <span class="row-eq">${ICON_EQ}</span>
+            </span>
+            <span class="track-title">${escapeHtml(cleanFilename(t.label))}</span>
+            <button class="track-dl" title="Unduh MP3" onclick="event.stopPropagation(); downloadTrackFromRow(this, ${JSON.stringify(t).replace(/"/g, "&quot;")})">${ICON_DOWNLOAD}</button>
         </div>
     `).join("");
+
+    highlightPlaying();
 }
+
+/* ==================== Playback queue / smart shuffle ==================== */
 
 function playFromOrder(i) {
     queue = shuffleOn ? shuffledOrder : baseOrder;
@@ -114,17 +181,12 @@ function playFromOrder(i) {
 }
 
 function playAllFromStart() {
-    if (!baseOrder.length) {
-        alert("Cari link dulu.");
-        return;
-    }
+    if (!baseOrder.length) return;
     playFromOrder(0);
 }
 
 function toggleShuffle() {
     shuffleOn = !shuffleOn;
-    shuffleBtn.textContent = shuffleOn ? "🔀 Smart Shuffle: ON" : "🔀 Smart Shuffle: OFF";
-    shuffleBtn.classList.toggle("on", shuffleOn);
 
     if (shuffleOn) shuffledOrder = smartShuffleOrder(baseOrder);
 
@@ -135,42 +197,54 @@ function toggleShuffle() {
         if (queueIndex === -1) queueIndex = 0;
     }
 
+    renderToolbar();
     renderTrackList();
-    highlightPlaying();
 }
 
 /**
- * "Smart" shuffle: plain random shuffle would happily put the same
- * artist back to back. This does a Fisher-Yates shuffle then repairs
- * the order so consecutive tracks don't share an artist when avoidable.
- * Artist is heuristically extracted from the "NN. Artist - Title [MP3]"
- * label since that's all the scraper gives us for playlist items.
+ * Smart Shuffle — bounded local shuffle, not a full random teleport.
+ * A plain Fisher-Yates would happily send track #30 straight to #1,
+ * which feels jarring. This shuffles inside small overlapping windows
+ * (like Spotify's Smart Shuffle keeping some continuity) and separately
+ * repairs same-artist collisions within a short local radius, so the
+ * result feels shuffled but never chaotic.
  */
 function smartShuffleOrder(tracks) {
     const arr = [...tracks];
+    const n = arr.length;
+    if (n < 2) return arr;
 
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+    const WINDOW = Math.max(4, Math.min(8, Math.ceil(n / 4)));
+
+    for (let start = 0; start < n; start += WINDOW) {
+        const end = Math.min(start + WINDOW, n);
+        for (let i = end - 1; i > start; i--) {
+            const j = start + Math.floor(Math.random() * (i - start + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+    }
+
+    // light cross-window mixing, still bounded to a small radius
+    const extraPasses = Math.floor(n / 3);
+    for (let k = 0; k < extraPasses; k++) {
+        const i = Math.floor(Math.random() * (n - 1));
+        const maxJ = Math.min(n - 1, i + WINDOW);
+        const j = i + Math.floor(Math.random() * (maxJ - i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
     }
 
+    // avoid the same artist landing back to back, swapping only nearby
     for (let i = 1; i < arr.length; i++) {
         const artistI = extractArtist(arr[i].label);
         const artistPrev = extractArtist(arr[i - 1].label);
         if (artistI && artistI === artistPrev) {
-            let swapWith = -1;
-            for (let j = i + 1; j < arr.length; j++) {
-                const artistJ = extractArtist(arr[j].label);
-                const okWithPrev = artistJ !== artistPrev;
-                const nextArtist = i + 1 < arr.length ? extractArtist(arr[i + 1].label) : null;
-                const okWithNext = !nextArtist || artistJ !== nextArtist;
-                if (okWithPrev && okWithNext) {
-                    swapWith = j;
+            for (let d = 1; d <= WINDOW; d++) {
+                const j = i + d;
+                if (j >= arr.length) break;
+                if (extractArtist(arr[j].label) !== artistPrev) {
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
                     break;
                 }
-            }
-            if (swapWith !== -1) {
-                [arr[i], arr[swapWith]] = [arr[swapWith], arr[i]];
             }
         }
     }
@@ -179,12 +253,21 @@ function smartShuffleOrder(tracks) {
 }
 
 function highlightPlaying() {
-    document.querySelectorAll(".track-item").forEach((el) => {
+    document.querySelectorAll(".track-row").forEach((el) => {
         el.classList.toggle("playing", Number(el.dataset.qidx) === queueIndex);
     });
 }
 
 /* ==================== Download ==================== */
+
+async function downloadTrackFromRow(btnEl, track) {
+    btnEl.classList.add("busy");
+    try {
+        await downloadTrack(track);
+    } finally {
+        btnEl.classList.remove("busy");
+    }
+}
 
 async function downloadTrack(track) {
     try {
@@ -214,46 +297,31 @@ function downloadCurrent() {
     downloadTrack(track);
 }
 
-function cleanFilename(label) {
-    return (label || "track")
-        .replace(/^\d+\.\s*/, "")
-        .replace(/\s*\[[^\]]*\]\s*$/, "")
-        .replace(/[\\/:*?"<>|]/g, "");
-}
-
-/**
- * Download semua lagu berurutan dengan jeda antar request biar gak
- * kena rate limit di sisi SpotiDown/SoundLoaders. Sengaja jalan di
- * browser (bukan satu serverless function panjang) karena Vercel
- * punya batas waktu eksekusi per request.
- */
 let downloadAllRunning = false;
 
 async function downloadAllTracks() {
     if (downloadAllRunning) return;
-    if (!baseOrder.length) {
-        alert("Cari link dulu.");
-        return;
-    }
+    if (!baseOrder.length) return;
 
     downloadAllRunning = true;
     const btn = document.getElementById("downloadAllBtn");
-    const original = btn.textContent;
+    const label = btn.querySelector("span");
+    const original = label.textContent;
 
     for (let i = 0; i < baseOrder.length; i++) {
         const t = baseOrder[i];
-        btn.textContent = `⬇ Mengunduh ${i + 1}/${baseOrder.length}...`;
+        label.textContent = `${i + 1}/${baseOrder.length}...`;
         try {
             await downloadTrack(t);
         } catch {
             // lanjut walau satu track gagal
         }
         if (i < baseOrder.length - 1) {
-            await new Promise((r) => setTimeout(r, 2500)); // jeda anti rate-limit
+            await new Promise((r) => setTimeout(r, 2500));
         }
     }
 
-    btn.textContent = original;
+    label.textContent = original;
     downloadAllRunning = false;
 }
 
@@ -265,14 +333,16 @@ const playPauseBtn = document.getElementById("playPauseBtn");
 const seek = document.getElementById("seek");
 const curTime = document.getElementById("curTime");
 const durTime = document.getElementById("durTime");
+const iconPlay = playPauseBtn.querySelector(".icon-play");
+const iconPause = playPauseBtn.querySelector(".icon-pause");
 
 function loadAndPlay() {
     const track = queue[queueIndex];
     if (!track) return;
 
+    playerCover.style.opacity = "1";
     playerCover.src = resultThumb || "";
     playerTitle.textContent = cleanFilename(track.label);
-    playPauseBtn.textContent = "⏳";
 
     audio.src = "/api/spotify-stream?token=" + encodeURIComponent(track.token);
     audio.play().catch(() => {});
@@ -308,8 +378,13 @@ function formatTime(sec) {
     return `${m}:${s}`;
 }
 
-audio.addEventListener("play", () => { playPauseBtn.textContent = "⏸"; });
-audio.addEventListener("pause", () => { playPauseBtn.textContent = "▶"; });
+function setPlayingIcon(isPlaying) {
+    iconPlay.style.display = isPlaying ? "none" : "block";
+    iconPause.style.display = isPlaying ? "block" : "none";
+}
+
+audio.addEventListener("play", () => setPlayingIcon(true));
+audio.addEventListener("pause", () => setPlayingIcon(false));
 
 audio.addEventListener("loadedmetadata", () => {
     seek.max = Math.floor(audio.duration) || 0;
@@ -325,7 +400,7 @@ audio.addEventListener("ended", () => {
     if (queue.length > 1) {
         playNext();
     } else {
-        playPauseBtn.textContent = "▶";
+        setPlayingIcon(false);
     }
 });
 
