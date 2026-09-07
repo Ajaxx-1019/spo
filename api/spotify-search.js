@@ -181,7 +181,37 @@ async function scrapeSpotify(url) {
       let ad = typeof actionRes.data === "string" ? JSON.parse(actionRes.data) : actionRes.data;
       if (!ad || ad.status === false) throw new Error(ad?.error || "SoundLoaders returned failure.");
 
-      const parsed = parseSoundloadersTracks(ad.html || "");
+      let parsed = parseSoundloadersTracks(ad.html || "");
+
+      // For playlists/albums, SoundLoaders sometimes hasn't finished resolving
+      // every track yet on the first response (some come back with no title,
+      // or the list is shorter than it should be). Give it a moment and
+      // re-ask once, keeping whichever result is more complete.
+      const looksIncomplete =
+        parsed.tracks.length > 1 &&
+        (parsed.tracks.some((t) => !t.title) || parsed.tracks.length <= 2);
+
+      if (looksIncomplete) {
+        await new Promise((r) => setTimeout(r, 2800));
+        try {
+          const retryRes = await scraperFetch(
+            { url: BASE + "/action", method: "POST", data: serializeData({ url, cftoken: token }), headers: formHeaders, rawResponse: true },
+            "SoundLoaders Action Retry",
+          );
+          const ad2 = typeof retryRes.data === "string" ? JSON.parse(retryRes.data) : retryRes.data;
+          if (ad2 && ad2.status !== false && ad2.html) {
+            const parsed2 = parseSoundloadersTracks(ad2.html);
+            const parsed2Better =
+              parsed2.tracks.length > parsed.tracks.length ||
+              (parsed2.tracks.length === parsed.tracks.length &&
+                parsed2.tracks.filter((t) => t.title).length > parsed.tracks.filter((t) => t.title).length);
+            if (parsed2Better) parsed = parsed2;
+          }
+        } catch {
+          // keep the first result if the retry itself fails
+        }
+      }
+
       if (parsed.tracks.length === 0) throw new Error("No tracks found from SoundLoaders.");
 
       const downloads = [];
