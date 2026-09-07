@@ -28,6 +28,27 @@ function cleanUrl(url) {
   }
 }
 
+/**
+ * Lets the search box also accept a plain keyword instead of forcing a
+ * real Spotify link. SpotiDown/SoundLoaders only understand actual
+ * Spotify URLs, so for a text query we first resolve it to a real
+ * track link via nexadev's title search, then hand that off to the
+ * normal scraping flow below.
+ */
+async function resolveKeywordToSpotifyUrl(query) {
+  try {
+    const r = await axios.get(
+      `https://api.nexadev.my.id/api/spotifyplay?q=${encodeURIComponent(query)}`,
+      { timeout: 10000, validateStatus: () => true },
+    );
+    const json = typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+    if (json?.status && json?.result?.url) return json.result.url;
+  } catch {
+    // fall through to null
+  }
+  return null;
+}
+
 async function scraperFetch(opts, label = "Request") {
   const { url, method = "GET", data, headers = {}, rawResponse = false } = opts;
   let response;
@@ -417,7 +438,18 @@ export default async function handler(req, res) {
     const source = (req.query.source || "spotidown").trim();
 
     if (!url) return res.status(400).json({ status: false, message: "Parameter url wajib diisi." });
-    if (!/open\.spotify\.com/i.test(url)) return res.status(400).json({ status: false, message: "Link yang dimasukkan bukan link Spotify." });
+
+    if (!/open\.spotify\.com/i.test(url)) {
+      // not a Spotify link — treat it as a search keyword
+      const resolvedUrl = await resolveKeywordToSpotifyUrl(url);
+      if (!resolvedUrl) {
+        return res.status(404).json({
+          status: false,
+          message: "Gak ketemu lagu buat kata kunci itu. Coba tempel link Spotify-nya langsung.",
+        });
+      }
+      url = resolvedUrl;
+    }
 
     url = cleanUrl(url);
     setSpotifySource(source === "soundloaders" ? "soundloaders" : "spotidown");
