@@ -75,8 +75,22 @@ async function resolveSoundloaders(payload) {
   try { dd = JSON.parse(dlRes.data); } catch { throw new Error("SoundLoaders resolve: response tidak valid."); }
 
   const $ = load(dd?.html || "");
-  const href = $("a").first().attr("href");
-  if (!href) throw new Error("SoundLoaders resolve: link tidak ditemukan.");
+  let href = null;
+  $("a").each((_, a) => {
+    if (href) return;
+    const h = $(a).attr("href");
+    const text = $(a).text().trim();
+    if (!h || !h.startsWith("http")) return;
+    if (text === "Download Another Song" || h.includes("tunecable.com") || h.includes("premium")) return;
+    const isCover =
+      text.toLowerCase().includes("cover") ||
+      h.includes("cover") ||
+      h.includes("scdn.co") ||
+      /\.(jpg|jpeg|png|webp)(\?.*)?$/i.test(h);
+    if (isCover) return;
+    href = h;
+  });
+  if (!href) throw new Error("SoundLoaders resolve: link MP3 tidak ditemukan (mungkin cuma ada cover).");
   return { url: href };
 }
 
