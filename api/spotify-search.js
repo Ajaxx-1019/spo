@@ -101,7 +101,7 @@ function setSpotifySource(source) {
   _spSource = source;
 }
 
-async function scrapeSpotify(url) {
+async function scrapeSpotify(url, { debug = false } = {}) {
   if (!_spSource) return { status: true, requireSource: true };
 
   if (url.match(/spotify\.com\/s\//i)) {
@@ -137,6 +137,7 @@ async function scrapeSpotify(url) {
   }
 
   let currentStatus = null;
+  let debugRawHtml = null;
   try {
     if (_spSource === "soundloaders") {
       const BASE = "https://soundloaders.app";
@@ -180,6 +181,7 @@ async function scrapeSpotify(url) {
       currentStatus = actionRes.status;
       let ad = typeof actionRes.data === "string" ? JSON.parse(actionRes.data) : actionRes.data;
       if (!ad || ad.status === false) throw new Error(ad?.error || "SoundLoaders returned failure.");
+      debugRawHtml = ad.html || "";
 
       let parsed = parseSoundloadersTracks(ad.html || "");
 
@@ -205,7 +207,10 @@ async function scrapeSpotify(url) {
               parsed2.tracks.length > parsed.tracks.length ||
               (parsed2.tracks.length === parsed.tracks.length &&
                 parsed2.tracks.filter((t) => t.title).length > parsed.tracks.filter((t) => t.title).length);
-            if (parsed2Better) parsed = parsed2;
+            if (parsed2Better) {
+              parsed = parsed2;
+              debugRawHtml = ad2.html;
+            }
           }
         } catch {
           // keep the first result if the retry itself fails
@@ -248,6 +253,7 @@ async function scrapeSpotify(url) {
         thumbnail: parsed.thumbnail,
         downloads,
         sourceUrl: url,
+        ...(debug ? { debugRawHtml: (debugRawHtml || "").slice(0, 12000), debugTrackCount: parsed.tracks.length } : {}),
       });
     }
 
@@ -297,6 +303,7 @@ async function scrapeSpotify(url) {
     }
 
     let finalHtml = r2Data.data || r2Data;
+    debugRawHtml = typeof finalHtml === "string" ? finalHtml : JSON.stringify(finalHtml);
     const $2 = load(finalHtml);
     const forms2 = $2('form[name="submitspurl"]').toArray();
 
@@ -392,10 +399,18 @@ async function scrapeSpotify(url) {
     const thumbnail = $2("img").first().attr("src");
 
     _spSource = null;
-    return createScraperResult(true, { title: artist ? `${artist} - ${title}` : title, thumbnail, downloads, sourceUrl: url });
+    return createScraperResult(true, {
+      title: artist ? `${artist} - ${title}` : title,
+      thumbnail,
+      downloads,
+      sourceUrl: url,
+      ...(debug ? { debugRawHtml: (debugRawHtml || "").slice(0, 12000), debugFormCount: forms2.length } : {}),
+    });
   } catch (err) {
     _spSource = null;
-    return createScraperResult(false, err.message, currentStatus);
+    const result = createScraperResult(false, err.message, currentStatus);
+    if (debug) result.debugRawHtml = (debugRawHtml || "").slice(0, 12000);
+    return result;
   }
 }
 
@@ -484,7 +499,8 @@ export default async function handler(req, res) {
     url = cleanUrl(url);
     setSpotifySource(source === "soundloaders" ? "soundloaders" : "spotidown");
 
-    const result = await scrapeSpotify(url);
+    const debug = req.query.debug === "1";
+    const result = await scrapeSpotify(url, { debug });
     return res.status(result.status ? 200 : 502).json(result);
   } catch (err) {
     return res.status(500).json({ status: false, message: err.message, stack: err.stack });
